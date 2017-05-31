@@ -11,10 +11,16 @@
 //! For more information refer to the [README](https://github.com/ticki/termion).
 #![warn(missing_docs)]
 
-#[cfg(not(target_os = "redox"))]
+#[cfg(unix)]
 extern crate libc;
 
-#[cfg(not(target_os = "redox"))]
+#[cfg(windows)]
+extern crate kernel32;
+
+#[cfg(windows)]
+extern crate winapi;
+
+#[cfg(unix)]
 mod termios;
 
 mod async;
@@ -24,7 +30,7 @@ mod size;
 pub use size::terminal_size;
 
 mod tty;
-pub use tty::{is_tty, get_tty};
+pub use tty::{is_tty, get_tty, init};
 
 #[macro_use]
 mod macros;

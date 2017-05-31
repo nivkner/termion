@@ -9,5 +9,9 @@ license = "MIT"
 keywords = ["tty", "color", "terminal", "password", "tui"]
 exclude = ["target", "CHANGELOG.md", "image.png", "Cargo.lock"]
 
-[target.'cfg(not(target_os = "redox"))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc = "0.2.8"
+
+[target.'cfg(windows)'.dependencies]
+kernel32-sys = "*"
+winapi = { version = "*" }

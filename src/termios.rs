@@ -1,6 +1,7 @@
 use libc::c_int;
 use std::mem;
 
+#[cfg(unix)]
 pub use libc::termios as Termios;
 
 #[cfg(target_os = "linux")]

@@ -1,9 +1,9 @@
 use std::io;
 
-#[cfg(not(target_os = "redox"))]
+#[cfg(unix)]
 use libc::c_ushort;
 
-#[cfg(not(target_os = "redox"))]
+#[cfg(unix)]
 #[repr(C)]
 struct TermSize {
     row: c_ushort,
@@ -17,6 +17,7 @@ struct TermSize {
 #[cfg(not(target_os = "redox"))]
 #[cfg(target_pointer_width = "64")]
 #[cfg(not(target_env = "musl"))]
+#[cfg(not(windows))]
 fn tiocgwinsz() -> u64 {
     use termios::TIOCGWINSZ;
     TIOCGWINSZ as u64
@@ -25,6 +26,7 @@ fn tiocgwinsz() -> u64 {
 #[cfg(not(target_os = "redox"))]
 #[cfg(target_pointer_width = "32")]
 #[cfg(not(target_env = "musl"))]
+#[cfg(not(windows))]
 fn tiocgwinsz() -> u32 {
     use termios::TIOCGWINSZ;
     TIOCGWINSZ as u32
@@ -37,7 +39,7 @@ fn tiocgwinsz() -> i32 {
 }
 
 /// Get the size of the terminal.
-#[cfg(not(target_os = "redox"))]
+#[cfg(unix)]
 pub fn terminal_size() -> io::Result<(u16, u16)> {
     use libc::ioctl;
     use libc::STDOUT_FILENO;
@@ -55,6 +57,26 @@ pub fn terminal_size() -> io::Result<(u16, u16)> {
 }
 
 /// Get the size of the terminal.
+#[cfg(windows)]
+pub fn terminal_size() -> io::Result<(u16, u16)> {
+
+    use kernel32::{GetStdHandle, GetConsoleScreenBufferInfo};
+    use winapi::TRUE;
+    use winapi::winbase::STD_OUTPUT_HANDLE;
+    use std::mem;
+
+    unsafe {
+        let stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
+        let mut csbi = mem::zeroed();
+        if GetConsoleScreenBufferInfo(stdout_handle, &mut csbi) == TRUE {
+            Ok(((csbi.srWindow.Right - csbi.srWindow.Left + 1) as u16,
+                (csbi.srWindow.Bottom - csbi.srWindow.Top + 1) as u16))
+        } else {
+            Err(io::Error::new(io::ErrorKind::Other, "Unable to get the terminal size."))
+        }
+    }
+}
+
 #[cfg(target_os = "redox")]
 pub fn terminal_size() -> io::Result<(u16, u16)> {
     use std::env;
