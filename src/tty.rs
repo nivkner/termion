@@ -50,7 +50,8 @@ pub fn init() -> () {
 }
 
 #[cfg(windows)]
-pub(crate) mod windows {
+// it'll be an api-breaking change to do it later
+pub /*(crate)*/ mod windows {
     use kernel32::{GetStdHandle, GetConsoleMode, SetConsoleMode};
     use winapi::wincon::{ENABLE_PROCESSED_OUTPUT, ENABLE_WRAP_AT_EOL_OUTPUT, ENABLE_LINE_INPUT,
                          ENABLE_MOUSE_INPUT, ENABLE_PROCESSED_INPUT, ENABLE_QUICK_EDIT_MODE};
