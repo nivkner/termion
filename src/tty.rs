@@ -51,10 +51,10 @@ pub fn init() -> () {
 
 #[cfg(windows)]
 // it'll be an api-breaking change to do it later
-pub  /*(crate)*/ mod windows {
+pub /*(crate)*/ mod windows {
     use std::io;
     use std::os::windows::prelude::*;
-    use kernel32::{GetLastError, GetStdHandle, GetConsoleMode, SetConsoleMode};
+    use kernel32::{GetStdHandle, GetConsoleMode, SetConsoleMode};
     use winapi::wincon::{ENABLE_PROCESSED_OUTPUT, ENABLE_WRAP_AT_EOL_OUTPUT, ENABLE_LINE_INPUT,
                          ENABLE_PROCESSED_INPUT, ENABLE_ECHO_INPUT};
 
@@ -89,7 +89,7 @@ pub  /*(crate)*/ mod windows {
                             })
     }
 
-    fn do_init() -> Result<PreInitState, LastError> {
+    fn do_init() -> Result<PreInitState, io::Error> {
         // there are many other console hosts on windows that might actually do something
         // rational with the output escape codes, so if the setup fails, carry on rather
         // than reporting an error. The assumption is that the cleanup in the drop trait
@@ -132,9 +132,7 @@ pub  /*(crate)*/ mod windows {
         OUT,
     }
 
-    pub struct LastError(DWORD);
-
-    fn get_std_handle(strm: StdStream) -> Result<HANDLE, LastError> {
+    fn get_std_handle(strm: StdStream) -> io::Result<HANDLE> {
         let which_handle = match strm {
             StdStream::IN => STD_INPUT_HANDLE,
             StdStream::OUT => STD_OUTPUT_HANDLE,
@@ -143,29 +141,29 @@ pub  /*(crate)*/ mod windows {
         unsafe {
             match GetStdHandle(which_handle) {
                 x if x != INVALID_HANDLE_VALUE => Ok(x),
-                _ => Err(LastError(GetLastError())),
+                _ => Err(io::Error::last_os_error()),
             }
         }
     }
 
-    pub fn set_console_mode(strm: StdStream, new_mode: DWORD) -> Result<DWORD, LastError> {
+    pub fn set_console_mode(strm: StdStream, new_mode: DWORD) -> io::Result<DWORD> {
         let prev = get_console_mode(strm)?;
         unsafe {
             let handle = get_std_handle(strm)?;
             if SetConsoleMode(handle, new_mode) == FALSE {
-                Err(LastError(GetLastError()))
+                Err(io::Error::last_os_error())
             } else {
                 Ok(prev)
             }
         }
     }
 
-    pub fn get_console_mode(strm: StdStream) -> Result<DWORD, LastError> {
+    pub fn get_console_mode(strm: StdStream) -> io::Result<DWORD> {
         unsafe {
             let handle = get_std_handle(strm)?;
             let mut mode: DWORD = 0;
             if GetConsoleMode(handle, &mut mode) == FALSE {
-                Err(LastError(GetLastError()))
+                Err(io::Error::last_os_error())
             } else {
                 Ok(mode)
             }
@@ -195,6 +193,8 @@ pub  /*(crate)*/ mod windows {
     /// This allows for getting stdio representing _only_ the TTY, and not other streams.
     #[cfg(target_os = "windows")]
     pub fn get_tty() -> io::Result<Box<io::Read>> {
+
+
 
         // TODO:
         // should this be CreateFile CONOUT$ ??
