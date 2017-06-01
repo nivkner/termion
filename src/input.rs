@@ -6,6 +6,9 @@ use std::ops;
 use event::{self, Event, Key};
 use raw::IntoRawMode;
 
+#[cfg(windows)]
+use winapi::DWORD;
+
 /// An iterator over input keys.
 pub struct Keys<R> {
     iter: Events<R>,
@@ -140,7 +143,7 @@ impl<R: Read> TermRead for R {
         }
 
         let string = try!(String::from_utf8(buf)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e)));
+                              .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e)));
         Ok(Some(string))
     }
 }
@@ -154,10 +157,12 @@ const EXIT_MOUSE_SEQUENCE: &'static str = csi!("?1006l\x1b[?1015l\x1b[?1002l\x1b
 /// A terminal with added mouse support.
 ///
 /// This can be obtained through the `From` implementations.
+#[cfg(not(windows))]
 pub struct MouseTerminal<W: Write> {
     term: W,
 }
 
+#[cfg(not(windows))]
 impl<W: Write> From<W> for MouseTerminal<W> {
     fn from(mut from: W) -> MouseTerminal<W> {
         from.write_all(ENTER_MOUSE_SEQUENCE.as_bytes()).unwrap();
@@ -166,9 +171,61 @@ impl<W: Write> From<W> for MouseTerminal<W> {
     }
 }
 
+#[cfg(not(windows))]
 impl<W: Write> Drop for MouseTerminal<W> {
     fn drop(&mut self) {
         self.term.write_all(EXIT_MOUSE_SEQUENCE.as_bytes()).unwrap();
+    }
+}
+
+/// A terminal with added mouse support.
+///
+/// This can be obtained through the `From` implementations.
+#[cfg(windows)]
+pub struct MouseTerminal<W: Write> {
+    prev_in_state: Option<DWORD>,
+    term: W,
+}
+
+#[cfg(windows)]
+impl<W: Write> From<W> for MouseTerminal<W> {
+    fn from(mut from: W) -> MouseTerminal<W> {
+        use tty::windows::*;
+        use winapi::wincon::{ENABLE_MOUSE_INPUT, ENABLE_QUICK_EDIT_MODE, ENABLE_ECHO_INPUT};
+        const ENABLE_VIRTUAL_TERMINAL_INPUT : DWORD = 0x0200;
+        
+        let opt_state = get_console_mode(StdStream::IN).ok();
+        if let Some(mode) = opt_state {
+            let new_in_mode = mode | ENABLE_VIRTUAL_TERMINAL_INPUT | ENABLE_MOUSE_INPUT;
+            let new_in_mode = new_in_mode & !ENABLE_QUICK_EDIT_MODE;
+            let new_in_mode = new_in_mode & !ENABLE_ECHO_INPUT;
+            println!("new mode: {:b}", new_in_mode);
+            set_console_mode(StdStream::IN, new_in_mode).ok();
+        }
+
+        // either way emit the mouse-enter sequence in case we are in
+        // a third-party console host that supports it.
+        from.write_all(ENTER_MOUSE_SEQUENCE.as_bytes()).unwrap();
+
+        MouseTerminal {
+            prev_in_state: opt_state,
+            term: from,
+        }
+    }
+}
+
+#[cfg(windows)]
+impl<W: Write> Drop for MouseTerminal<W> {
+    fn drop(&mut self) {
+        use tty::windows::StdStream;
+
+        // either way emit the mouse-enter sequence in case we are in
+        // a third-party console host that supports it.
+        self.term.write_all(EXIT_MOUSE_SEQUENCE.as_bytes()).unwrap();
+
+        if let Some(mode) = self.prev_in_state {
+            ::tty::windows::set_console_mode(StdStream::IN, mode).ok();
+        }
     }
 }
 
@@ -326,3 +383,4 @@ mod test {
     }
 
 }
+

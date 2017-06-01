@@ -51,22 +51,19 @@ pub fn init() -> () {
 
 #[cfg(windows)]
 // it'll be an api-breaking change to do it later
-pub /*(crate)*/ mod windows {
-    use kernel32::{GetStdHandle, GetConsoleMode, SetConsoleMode};
-    use winapi::wincon::{ENABLE_PROCESSED_OUTPUT, ENABLE_WRAP_AT_EOL_OUTPUT, ENABLE_LINE_INPUT,
-                         ENABLE_MOUSE_INPUT, ENABLE_PROCESSED_INPUT, ENABLE_QUICK_EDIT_MODE};
-
-    // once winapi 0.3 is available
-    // use winapi::wincon::{ENABLE_VIRTUAL_TERMINAL_PROCESSING, ENABLE_VIRTUAL_TERMINAL_INPUT};
-    const ENABLE_VIRTUAL_TERMINAL_PROCESSING: DWORD = 0x0004;
-    const ENABLE_VIRTUAL_TERMINAL_INPUT: DWORD = 0x0200;
-
-    use winapi::winbase::{STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
-    use winapi::{FALSE, TRUE};
-    use winapi::DWORD;
-
+pub  /*(crate)*/ mod windows {
     use std::io;
     use std::os::windows::prelude::*;
+    use kernel32::{GetLastError, GetStdHandle, GetConsoleMode, SetConsoleMode};
+    use winapi::wincon::{ENABLE_PROCESSED_OUTPUT, ENABLE_WRAP_AT_EOL_OUTPUT, ENABLE_LINE_INPUT,
+                         ENABLE_PROCESSED_INPUT, ENABLE_ECHO_INPUT};
+
+    use winapi::winbase::{STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
+    use winapi::{FALSE, DWORD, HANDLE, INVALID_HANDLE_VALUE};
+
+    // once winapi 0.3 is available
+    // use winapi::wincon::{ENABLE_VIRTUAL_TERMINAL_PROCESSING};
+    const ENABLE_VIRTUAL_TERMINAL_PROCESSING: DWORD = 0x0004;
 
     pub struct PreInitState {
         do_cleanup: bool,
@@ -77,95 +74,115 @@ pub /*(crate)*/ mod windows {
     impl Drop for PreInitState {
         fn drop(&mut self) {
             if self.do_cleanup {
-                unsafe {
-                    println!("cleaning up");
-                    SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), self.current_out_mode);
-                    SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), self.current_in_mode);
-                }
+                println!("cleaning up");
+                set_console_mode(StdStream::OUT, self.current_out_mode).ok();
+                set_console_mode(StdStream::IN, self.current_in_mode).ok();
             }
         }
     }
 
     pub fn init() -> PreInitState {
+        do_init().unwrap_or(PreInitState {
+                                do_cleanup: false,
+                                current_out_mode: 0,
+                                current_in_mode: 0,
+                            })
+    }
+
+    fn do_init() -> Result<PreInitState, LastError> {
         // there are many other console hosts on windows that might actually do something
         // rational with the output escape codes, so if the setup fails, carry on rather
         // than reporting an error. The assumption is that the cleanup in the drop trait
         // will always be able to set the flags that are currently set.
+        let current_out_mode = get_console_mode(StdStream::OUT)?;
+        let current_in_mode = get_console_mode(StdStream::IN)?;
+
+        let new_out_mode = current_out_mode | ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT |
+                           ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+
+        // ignore failure here and hope we are in a capable third party console
+        set_console_mode(StdStream::OUT, new_out_mode).ok();
+
+        // TODO: it seems like ENABLE_VIRTUAL_TERMINAL_INPUT causes ^C to be passed
+        // through in the input stream, overiding ENABLE_PROCESSED_INPUT.
+        // ENABLE_VIRTUAL_TERMINAL_INPUT is only used for mouse event handling at this
+        // point. I'm not sure what the desired behaviour is but if that is not the same
+        // maybe it would be simpler
+        // to start a thread and wait for the mouse events using the windows console
+        // api and post them back in a similar fashion to the async reader.
+
+        let new_in_mode = current_in_mode | ENABLE_PROCESSED_INPUT;
+        let new_in_mode = new_in_mode & !ENABLE_ECHO_INPUT;
+
+        // ignore failure here and hope we are in a capable third party console
+        set_console_mode(StdStream::IN, new_in_mode).ok();
+
+        println!("cim {:x}, com {:x}", current_in_mode, current_out_mode);
+
+        Ok(PreInitState {
+               do_cleanup: true,
+               current_out_mode,
+               current_in_mode,
+           })
+    }
+
+    #[derive(Copy, Clone)]
+    pub enum StdStream {
+        IN,
+        OUT,
+    }
+
+    pub struct LastError(DWORD);
+
+    fn get_std_handle(strm: StdStream) -> Result<HANDLE, LastError> {
+        let which_handle = match strm {
+            StdStream::IN => STD_INPUT_HANDLE,
+            StdStream::OUT => STD_OUTPUT_HANDLE,
+        };
+
         unsafe {
-            // TODO: this can fail -> INVALID_HANDLE_VALUE, GetLastError()
-            let stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
-            // TODO: this can fail -> INVALID_HANDLE_VALUE, GetLastError()
-            let stdin_handle = GetStdHandle(STD_INPUT_HANDLE);
-
-            let mut current_out_mode: DWORD = 0;
-            if GetConsoleMode(stdout_handle, &mut current_out_mode) == FALSE {
-                return PreInitState {
-                    do_cleanup: false,
-                    current_out_mode: 0,
-                    current_in_mode: 0,
-                };
+            match GetStdHandle(which_handle) {
+                x if x != INVALID_HANDLE_VALUE => Ok(x),
+                _ => Err(LastError(GetLastError())),
             }
+        }
+    }
 
-            let mut current_in_mode: DWORD = 0;
-            if GetConsoleMode(stdin_handle, &mut current_in_mode) == FALSE {
-                return PreInitState {
-                    do_cleanup: false,
-                    current_out_mode: 0,
-                    current_in_mode: 0,
-                };
+    pub fn set_console_mode(strm: StdStream, new_mode: DWORD) -> Result<DWORD, LastError> {
+        let prev = get_console_mode(strm)?;
+        unsafe {
+            let handle = get_std_handle(strm)?;
+            if SetConsoleMode(handle, new_mode) == FALSE {
+                Err(LastError(GetLastError()))
+            } else {
+                Ok(prev)
             }
+        }
+    }
 
-            let new_out_mode = current_out_mode | ENABLE_PROCESSED_OUTPUT |
-                               ENABLE_WRAP_AT_EOL_OUTPUT |
-                               ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-
-            // ignore failure here and hope we are in a capable third party console
-            SetConsoleMode(stdout_handle, new_out_mode);
-
-            // TODO: ENABLE_MOUSE_INPUT and ENABLE_QUICK_EDIT_MODE need to be changed in
-            // the mouse mode trait, not here for everything
-
-            // TODO: it seems like ENABLE_VIRTUAL_TERMINAL_INPUT causes ^C to be passed
-            // through in the input stream, overiding ENABLE_PROCESSED_INPUT. 
-            // ENABLE_VIRTUAL_TERMINAL_INPUT is only used for mouse event handling at this
-            // point. I'm not sure what the desired behaviour is but maybe it would be simpler
-            // to start a thread and wait for the mouse events using the windows console
-            // api and post them back in a similar fashion to the async reader.
-
-            let new_in_mode = current_in_mode | ENABLE_VIRTUAL_TERMINAL_INPUT |
-                              ENABLE_PROCESSED_INPUT |
-                              ENABLE_MOUSE_INPUT;
-            let new_in_mode = new_in_mode & !ENABLE_QUICK_EDIT_MODE;
-
-            // ignore failure here and hope we are in a capable third party console
-            SetConsoleMode(stdin_handle, new_in_mode);
-
-            PreInitState {
-                do_cleanup: true,
-                current_out_mode,
-                current_in_mode,
+    pub fn get_console_mode(strm: StdStream) -> Result<DWORD, LastError> {
+        unsafe {
+            let handle = get_std_handle(strm)?;
+            let mut mode: DWORD = 0;
+            if GetConsoleMode(handle, &mut mode) == FALSE {
+                Err(LastError(GetLastError()))
+            } else {
+                Ok(mode)
             }
         }
     }
 
     pub fn set_raw_input_mode(enable: bool) -> bool {
-        unsafe {
-            // TODO: this can fail -> INVALID_HANDLE_VALUE, GetLastError()
-            let stdin_handle = GetStdHandle(STD_INPUT_HANDLE);
-
-            let mut current_mode: DWORD = 0;
-            if GetConsoleMode(stdin_handle, &mut current_mode) == FALSE {
-                return false;
-            }
-
-            let new_mode = if enable {
-                current_mode & !ENABLE_LINE_INPUT
-            } else {
-                current_mode | ENABLE_LINE_INPUT
-            };
-
-            SetConsoleMode(stdin_handle, new_mode) == TRUE
-        }
+        get_console_mode(StdStream::IN)
+            .map(|current_mode| {
+                     let new_mode = if enable {
+                         current_mode & !ENABLE_LINE_INPUT
+                     } else {
+                         current_mode | ENABLE_LINE_INPUT
+                     };
+                     set_console_mode(StdStream::IN, new_mode)
+                 })
+            .is_ok()
     }
 
     // TODO: provide an implementation of this, perhaps just delegating to the atty crate?
