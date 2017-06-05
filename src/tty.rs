@@ -132,7 +132,7 @@ pub /*(crate)*/ mod windows {
         OUT,
     }
 
-    fn get_std_handle(strm: StdStream) -> io::Result<HANDLE> {
+    pub fn get_std_handle(strm: StdStream) -> io::Result<HANDLE> {
         let which_handle = match strm {
             StdStream::IN => STD_INPUT_HANDLE,
             StdStream::OUT => STD_OUTPUT_HANDLE,

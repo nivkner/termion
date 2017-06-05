@@ -60,13 +60,17 @@ pub fn terminal_size() -> io::Result<(u16, u16)> {
 #[cfg(windows)]
 pub fn terminal_size() -> io::Result<(u16, u16)> {
 
-    use kernel32::{GetStdHandle, GetConsoleScreenBufferInfo};
+    // Should this use "get_tty()"? As it is, it mirrors the
+    // unix version in useing stdout.
+
+    use kernel32::GetConsoleScreenBufferInfo;
     use winapi::TRUE;
-    use winapi::winbase::STD_OUTPUT_HANDLE;
     use std::mem;
+    use ::tty::windows::{get_std_handle, StdStream};
+
+    let stdout_handle = get_std_handle(StdStream::OUT)?;
 
     unsafe {
-        let stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
         let mut csbi = mem::zeroed();
         if GetConsoleScreenBufferInfo(stdout_handle, &mut csbi) == TRUE {
             Ok(((csbi.srWindow.Right - csbi.srWindow.Left + 1) as u16,
