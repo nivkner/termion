@@ -19,7 +19,10 @@ build: false
 
 test_script:
   - set RUST_BACKTRACE=1
-  - cargo build --release --manifest-path newcon\Cargo.toml
-  - newcon\target\release\newcon cargo build --verbose
-  - newcon\target\release\newcon cargo test --verbose
-  - newcon\target\release\newcon cargo test --release --verbose
+  # - cargo build --release --manifest-path newcon\Cargo.toml
+  # - newcon\target\release\newcon cargo build --verbose
+  # - newcon\target\release\newcon cargo test --verbose
+  # - newcon\target\release\newcon cargo test --release --verbose
+  - cargo build --verbose
+  - cargo test --verbose
+  - cargo test --release --verbose

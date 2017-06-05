@@ -93,11 +93,11 @@ pub fn terminal_size() -> io::Result<(u16, u16)> {
 
 #[cfg(test)]
 mod test {
-    #[cfg(not(windows))]
+//    #[cfg(not(windows))]
     use super::*;
 
     #[test]
-    #[cfg(not(windows))]
+//    #[cfg(not(windows))]
     fn test_size() {
         assert!(terminal_size().is_ok());
     }
