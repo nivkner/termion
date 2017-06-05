@@ -1,0 +1,7 @@
+[package]
+name = "newcon"
+version = "0.1.0"
+authors = ["Jim McGrath <jimmc2@gmail.com>"]
+
+[dependencies]
+kernel32-sys = "*"
