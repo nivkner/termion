@@ -16,16 +16,37 @@ pub fn is_tty<T: AsRawHandle>(stream: &T) -> bool {
     }
 }
 
-/// Get the TTY device.
+/// Get a read-only file representing the TTY.
 ///
-/// This allows for getting stdio representing _only_ the TTY, and not other streams.
-pub fn get_tty() -> io::Result<fs::File> {
+/// This allows for reading from the TTY if one is available, even when stdin is redirected.
+pub fn get_read_tty() -> io::Result<fs::File> {
     let handle = unsafe {CreateFile2( ffi::OsStr::new("CONIN$")
                                       .encode_wide()
                                       .chain(Some(0).into_iter())
                                       .collect::<Vec<_>>()
                                       .as_ptr(),
-                                      GENERIC_READ | GENERIC_WRITE,
+                                      GENERIC_READ,
+                                      FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                      OPEN_EXISTING,
+                                      ptr::null_mut())};
+    if handle == INVALID_HANDLE_VALUE {
+        Err(io::Error::last_os_error())
+    } else {
+        let file = unsafe { fs::File::from_raw_handle(handle) };
+        Ok(file)
+    }
+}
+
+/// Get a write-only file representing the TTY.
+///
+/// This allows for writing to the TTY if one is available, even when stdout is redirected.
+pub fn get_write_tty() -> io::Result<fs::File> {
+    let handle = unsafe {CreateFile2( ffi::OsStr::new("CONOUT$")
+                                      .encode_wide()
+                                      .chain(Some(0).into_iter())
+                                      .collect::<Vec<_>>()
+                                      .as_ptr(),
+                                      GENERIC_WRITE,
                                       FILE_SHARE_READ | FILE_SHARE_WRITE,
                                       OPEN_EXISTING,
                                       ptr::null_mut())};

@@ -13,10 +13,18 @@ pub fn is_tty<T: AsRawFd>(stream: &T) -> bool {
     }
 }
 
-/// Get the TTY device.
+/// Get a read-only file representing the TTY.
 ///
-/// This allows for getting stdio representing _only_ the TTY, and not other streams.
-pub fn get_tty() -> io::Result<fs::File> {
+/// This allows for reading from the TTY if one is available, even when stdin is redirected.
+pub fn get_read_tty() -> io::Result<fs::File> {
     let tty = try!(env::var("TTY").map_err(|x| io::Error::new(io::ErrorKind::NotFound, x)));
-    fs::OpenOptions::new().read(true).write(true).open(tty)
+    fs::OpenOptions::new().read(true).write(false).open(tty)
+}
+
+/// Get a write-only file representing the TTY.
+///
+/// This allows for writing to the TTY if one is available, even when stdout is redirected.
+pub fn get_write_tty() -> io::Result<fs::File> {
+    let tty = try!(env::var("TTY").map_err(|x| io::Error::new(io::ErrorKind::NotFound, x)));
+    fs::OpenOptions::new().read(false).write(true).open(tty)
 }
