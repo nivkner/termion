@@ -6,6 +6,7 @@ use super::winapi::um::winnt::{GENERIC_READ, GENERIC_WRITE, FILE_SHARE_READ, FIL
 use super::winapi::um::fileapi::{CreateFile2, OPEN_EXISTING};
 use super::winapi::um::consoleapi::{GetConsoleMode};
 
+/// Is this stream a TTY?
 pub fn is_tty<T: AsRawHandle>(stream: &T) -> bool {
     let std_handle = stream.as_raw_handle();
     if !(std_handle == INVALID_HANDLE_VALUE) {
