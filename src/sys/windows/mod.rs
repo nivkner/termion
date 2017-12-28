@@ -3,12 +3,7 @@ extern crate winapi;
 use std::ops::{Deref, DerefMut};
 
 pub mod tty;
-pub mod size {
-    use std::io;
-    pub fn terminal_size() -> io::Result<(u16, u16)> {
-        unimplemented!()
-    }
-}
+pub mod size;
 
 pub mod attr {
     use super::Termios;
