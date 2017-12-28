@@ -13,7 +13,7 @@ exclude = ["target", "CHANGELOG.md", "image.png", "Cargo.lock"]
 libc = "0.2.8"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version = "0.3.2", features =["std", "handleapi", "winuser", "processenv", "consoleapi", "processthreadsapi"] }
+winapi = { version = "0.3.2", features =["std", "handleapi", "consoleapi", "fileapi", "winnt"] }
 
 [target.'cfg(target_os = "redox")'.dependencies]
 redox_syscall = "0.1"
